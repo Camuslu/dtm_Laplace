@@ -26,13 +26,14 @@ class variational_inference():
 		self.D = D
 		self.N = N
 		self.E_log_sum_exp_beta_t_k=np.zeros((T,K))
-		self.iteration = iters
+		self.iters = iters
 		self.document = document
 		self.token_word = {}
 		self.word_token = {}
 		if alpha_0 == None:
 			self.alpha_0 = np.ones(self.K) #the uniform prior on Dirichlet
 		self.S = sample_size
+		self.elbo = [0]*self.iters
 
 	# TODO: tokenize a document into {"apple": 1,...}
 	def tokenize(self, document):
@@ -157,3 +158,92 @@ class variational_inference():
 		sigma_ = np.sqrt(np.diag(self.cov_beta_t[t][k]))
 		beta_s  = lambda_*x + self.mu_beta_t[t][k]
 		return misc.logsumexp(x)
+
+	def ELBO(self):
+	    elbo=0
+	    ##first everything from nominator
+	    elbo+=self.E_log_p_beta_0()
+	    elbo+=self.E_log_p_beta_t()
+	    elbo+=self.E_log_p_theta()
+	    elbo+=self.E_log_p_z_and_w_cond_beta_theta()
+	    
+	    ##then everything from denomiator (entropy)
+	    elbo-=self.entropy_beta_quick()
+	    elbo-=self.entropy_theta()
+	    elbo-=self.entropy_phi()
+	    return elbo
+
+	def entropy_beta_quick(self):
+		# entropy of Gaussian q(beta) for every (t, k)
+	    summ=0
+	    const=2*np.pi*np.exp(1) #not really needed as just a const in ELBO
+	    for t in range(self.T):
+        	for k in range(self.K):
+            	temp=0.5*(self.V*np.log(const)+sum(np.log(np.diag(self.cov_beta_t[t][k]))))
+            	summ+=temp
+    	return summ
+
+    def entropy_theta(self):
+    	# using the same notation as in Dirichlet entropy on wikipedia:
+    	## https://en.wikipedia.org/wiki/Dirichlet_distribution#Entropy
+	    summ=0
+	    for t in range(self.T):
+	        for d in range(self.D):
+	            alpha_t_d=self.alpha[t][d]
+	            alpha_sum=sum(alpha_t_d)
+	            h = sum(sp.gammaln(alpha_t_d))-sp.gammaln(alpha_sum)
+	            h -= (self.K-alpha_sum)*sp.digamma(alpha_sum)
+	            h -= np.dot(alpha_t_d-1,sp.digamma(alpha_t_d))
+	            summ+=h
+	    return summ
+
+	def entropy_phi(self):
+		h = 0
+		for t in range(self.T):
+	        for d in range(self.D):
+	            for n in range(self.N):
+	                h -= np.dot(np.log(self.phi[t][d][n]), self.phi[t][d][n])
+   		return h
+
+   	def E_log_p_beta_0(self):
+   		summ = 0
+	    for k in range(self.K):
+	        ##Gaussian quadratic form identity
+	        temp = np.dot(self.mu_beta_t[0][k],self.mu_beta_t[0][k])+sum(np.diag(self.cov_beta_t[0][k]))
+	        summ -= 0.5*temp
+	    return summ
+
+	def E_log_p_beta_t(self):
+		## using the same formula in appendix A of the original dtm paper
+		## https://mimno.infosci.cornell.edu/info6150/readings/dynamic_topic_models.pdf
+	    summ=0
+	    for t in range(1,self.T):
+	        for k in range(self.K):
+	            temp1=np.dot(self.mu_beta_t[t][k],self.mu_beta_t[t][k])+sum(np.diag(self.cov_beta_t[t][k]))
+	            temp2=np.dot(self.mu_beta_t[t-1][k],self.mu_beta_t[t-1][k])+sum(np.diag(self.cov_beta_t[t-1][k]))
+	            temp3=(-2)*np.dot(self.mu_beta_t[t][k],self.mu_beta_t[t-1][k])
+	            summ-=0.5/(self.sigma**2)*(temp1+temp2+temp3)
+	    return summ
+
+	def E_log_p_theta(self):
+	    summ=0
+	    for t in range(self.T):
+	        for d in range(self.D):
+	            alpha_t_d=self.alpha[t][d]
+	            E_log_theta=np.array(sp.digamma(alpha_t_d))-sp.digamma(sum(alpha_t_d))
+	            temp=np.dot(np.ones(self.K)*(self.alpha_0-1),E_log_theta)
+	            summ+=temp
+	    return summ
+
+
+	def E_log_p_z_and_w_cond_beta_theta(self):
+	    ##first get K-array for the digamma on sum of gamma_k
+	    total=0
+	    for t in range(self.T):
+	        for d in range(self,D):
+	            for n in range(self.N):
+	                word_index=int(self.document[t][d][n])
+	                v2=sp.digamma(self.alpha[t][d])-sp.digamma(sum(self.alpha[t][d]))+np.transpose(self,mu_beta_t[t])[word_index]-self.E_log_sum_exp_beta_t_k[t]
+	                total+=np.dot(self.phi[t][d][n],v2)
+	    return total
+
