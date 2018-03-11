@@ -125,7 +125,7 @@ class variational_inference():
 	            self.alpha[t][d] = self.alpha_0+np.sum(self.phi[t][d],axis=0)
 	            #no need to normalize the alpha k-vector here. it's just a parameter for Dirichlet
 
-	def update_phi(self):
+	def update_phi(self): #optimize
 		for t in range(self.T):
 	        for d in range(self.D):
 	            quick_digamma = sp.digamma(sum(self.alpha[t][d]))  #this is the same for every word n on every topic k
@@ -225,7 +225,7 @@ class variational_inference():
 	            summ-=0.5/(self.sigma**2)*(temp1+temp2+temp3)
 	    return summ
 
-	def E_log_p_theta(self):
+	def E_log_p_theta(self):  #really??
 	    summ=0
 	    for t in range(self.T):
 	        for d in range(self.D):
@@ -236,14 +236,15 @@ class variational_inference():
 	    return summ
 
 
-	def E_log_p_z_and_w_cond_beta_theta(self):
+	def E_log_p_z_and_w_cond_beta_theta(self): #optimize
 	    ##first get K-array for the digamma on sum of gamma_k
 	    total=0
 	    for t in range(self.T):
 	        for d in range(self,D):
 	            for n in range(self.N):
-	                word_index=int(self.document[t][d][n])
-	                v2=sp.digamma(self.alpha[t][d])-sp.digamma(sum(self.alpha[t][d]))+np.transpose(self,mu_beta_t[t])[word_index]-self.E_log_sum_exp_beta_t_k[t]
-	                total+=np.dot(self.phi[t][d][n],v2)
+	                word_index = int(self.document[t][d][n])
+	                nu =sp.digamma(self.alpha[t][d])-sp.digamma(sum(self.alpha[t][d])) \
+	                    +np.transpose(self.mu_beta_t[t])[word_index]-self.E_log_sum_exp_beta_t_k[t]
+	                total+=np.dot(self.phi[t][d][n],nu)
 	    return total
 
