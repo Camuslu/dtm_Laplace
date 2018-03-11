@@ -46,4 +46,4 @@ def simulate_data(K, V, N, D, T, sigma, alpha_0):
                 z = generate_multinomial(theta) #topic assignment to 1 word
                 document[t][d][n] = generate_multinomial(beta_pi[t][z]) #specific word assignment
     print ("topics= %d, vocab = %d, D = %d, N = %d, T =%d" %(K,V,D,N,T))
-    return document
+    return (document, beta)
