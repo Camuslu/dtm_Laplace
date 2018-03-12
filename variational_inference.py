@@ -61,6 +61,7 @@ class variational_inference():
 		return sum(np.exp(self.beta_k[v]))
 
 	def B_func(self, t, k):
+		#return the B_t_k vector of length V used for beta update
 		#print ("B_func,k=",k,"t=",t)
 		B_t_k = np.zeros(self.V)
 		for d in range(self.D):
@@ -68,6 +69,15 @@ class variational_inference():
 				B_t_k[int(self.document[t][d][n])] += self.phi[t][d][n][k]
 		return B_t_k
 
+	# def B_func(self, t, k):
+	# 	# return the B_t_k vector of length V used for beta update
+	# 	B_t_k = np.zeros(self.V)
+	# 	for d in range(self.D):
+	# 		phi_t_d_k = self.phi[t][d].transpose()[k] #length N
+	# 		doc_t_d = self.document[t][d]
+	# 		one_hot = np.array([np.eye(self.V)[idx] for idx in doc_t_d])  #N by V
+	# 		B_t_k += np.dot(phi_t_d_k, one_hot)
+	# 	return B_t_k
 
 	def gradient_descent_beta(self, t, k):
 		# find mode of f(beta) for topic k, or argmin of -f(beta)
@@ -81,7 +91,7 @@ class variational_inference():
 		else: # t= T-1, the last time slice
 			fn = lambda beta: sum(b_val)*misc.logsumexp(beta) + 0.5/(self.sigma ** 2)*np.dot(beta,beta) \
 						  -1.0/(self.sigma ** 2)*np.dot(self.mu_beta_t[self.T - 2][k],beta)-np.dot(b_val,beta)
-		res = minimize(fn, np.zeros(self.V), method='SLSQP')
+		res = minimize(fn, np.zeros(self.V), method='L-BFGS-B')
 		return (res.x, b_val)
 
 	def update_beta(self):
@@ -117,7 +127,6 @@ class variational_inference():
 			for d in range(self.D):
 				quick_digamma = sp.digamma(sum(self.alpha[t][d]))  #this is the same for every word n on every topic k
 				for n in range(self.N):
-					phi_temp = np.zeros(self.K)
 					log_phi_temp = np.zeros(self.K)
 					word_index = int(self.document[t][d][n])
 					for k in range(self.K):
