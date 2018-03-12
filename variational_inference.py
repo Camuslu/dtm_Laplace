@@ -39,7 +39,8 @@ class variational_inference():
 			self.uniform_alpha_0 = False
 		self.alpha=np.ones((T,D,K)) #the init on variational parameter for q(theta), to be updated later
 		self.mu_beta_t = np.zeros((T, K, V))
-		self.cov_beta_t = np.zeros((T, K, V, V))
+		#self.cov_beta_t = np.zeros((T, K, V, V))
+		self.cov_beta_t = np.zeros((T, K, V))
 		self.phi = np.zeros((T, D, N, K))
 		for t in range(self.T):
 			for d in range(self.D):
@@ -77,7 +78,7 @@ class variational_inference():
 		elif t < self.T-1:
 			fn = lambda beta: sum(b_val)*misc.logsumexp(beta) + 1.0/(self.sigma**2)*np.dot(beta,beta) \
 						  -1.0/(self.sigma ** 2) * np.dot(self.mu_beta_t[t + 1][k]+self.mu_beta_t[t - 1][k], beta)-np.dot(b_val,beta)
-		else:
+		else: # t= T-1, the last time slice
 			fn = lambda beta: sum(b_val)*misc.logsumexp(beta) + 0.5/(self.sigma ** 2)*np.dot(beta,beta) \
 						  -1.0/(self.sigma ** 2)*np.dot(self.mu_beta_t[self.T - 2][k],beta)-np.dot(b_val,beta)
 		res = minimize(fn, np.zeros(self.V), method='SLSQP')
@@ -89,13 +90,20 @@ class variational_inference():
 				self.mu_beta_t[t][k], b_val = self.gradient_descent_beta(t, k)
 				s = np.exp(self.mu_beta_t[t][k])
 				t_val = sum(s)
-				D = 2/(self.sigma**2)*np.ones(self.V) + sum(b_val)*s/t_val 
+				if t == 0:
+					D = (1+ 1/(self.sigma**2))*np.ones(self.V) + sum(b_val)*s/t_val 
+				elif t < self.T-1:
+					D = 2/(self.sigma**2)*np.ones(self.V) + sum(b_val)*s/t_val 
+				else: # t= T-1, the last time slice
+					D = 1/(self.sigma**2)*np.ones(self.V) + sum(b_val)*s/t_val 
 				D_inv = 1/D #array of length V, to be used as diagonal later
 				v = (np.sqrt(sum(b_val))/t_val)*s
-				downstair=1-sum(D_inv*v*v)
+				downstair = 1-sum(D_inv*v*v) #scalar
 				D_inv_v=D_inv*v
-				upstair=np.outer(D_inv_v,D_inv_v)
-				self.cov_beta_t[t][k]=np.diag(D_inv)+upstair/downstair
+				#upstair=np.outer(D_inv_v,D_inv_v)
+				upstair = D_inv_v*D_inv_v #just need the diagonal entries for approximation
+				#self.cov_beta_t[t][k]=np.diag(D_inv)+upstair/downstair
+				self.cov_beta_t[t][k] = D_inv + upstair/downstair #V-vector
 
 
 	def update_alpha(self):
@@ -134,7 +142,8 @@ class variational_inference():
 		# then multiply each xi with sigma_i, where sigma_i is sqrt of covariance at beta_t_k (here we use the diagonal approx for covariance matrix)
 		# finally add mu_beta_t_k for translation
 		x = np.random.normal(0, 1, self.V)
-		sigma_ = np.sqrt(np.diag(self.cov_beta_t[t][k]))
+		#sigma_ = np.sqrt(np.diag(self.cov_beta_t[t][k]))
+		sigma_ = np.sqrt(self.cov_beta_t[t][k])
 		beta_s  = sigma_*x + self.mu_beta_t[t][k]
 		return misc.logsumexp(x)
 
@@ -158,8 +167,8 @@ class variational_inference():
 		const=2*np.pi*np.exp(1) #not really needed as just a const in ELBO
 		for t in range(self.T):
 			for k in range(self.K):
-				# temp=0.5*(self.V*np.log(const)+sum(np.log(np.diag(self.cov_beta_t[t][k]))))
-				temp=0.5*(sum(np.log(np.diag(self.cov_beta_t[t][k]))))
+				#temp=0.5*(sum(np.log(np.diag(self.cov_beta_t[t][k]))))
+				temp=0.5*(sum(np.log(self.cov_beta_t[t][k])))
 				summ+=temp
 		return summ
 
@@ -189,7 +198,8 @@ class variational_inference():
 		summ = 0
 		for k in range(self.K):
 			##Gaussian quadratic form identity
-			temp = np.dot(self.mu_beta_t[0][k],self.mu_beta_t[0][k])+sum(np.diag(self.cov_beta_t[0][k]))
+			#temp = np.dot(self.mu_beta_t[0][k],self.mu_beta_t[0][k])+sum(np.diag(self.cov_beta_t[0][k]))
+			temp = np.dot(self.mu_beta_t[0][k],self.mu_beta_t[0][k])+sum(self.cov_beta_t[0][k])
 			summ -= 0.5*temp
 		return summ
 
@@ -199,8 +209,10 @@ class variational_inference():
 		summ=0
 		for t in range(1,self.T):
 			for k in range(self.K):
-				temp1=np.dot(self.mu_beta_t[t][k],self.mu_beta_t[t][k])+sum(np.diag(self.cov_beta_t[t][k]))
-				temp2=np.dot(self.mu_beta_t[t-1][k],self.mu_beta_t[t-1][k])+sum(np.diag(self.cov_beta_t[t-1][k]))
+				# temp1=np.dot(self.mu_beta_t[t][k],self.mu_beta_t[t][k])+sum(np.diag(self.cov_beta_t[t][k]))
+				# temp2=np.dot(self.mu_beta_t[t-1][k],self.mu_beta_t[t-1][k])+sum(np.diag(self.cov_beta_t[t-1][k]))
+				temp1=np.dot(self.mu_beta_t[t][k],self.mu_beta_t[t][k])+sum(self.cov_beta_t[t][k])
+				temp2=np.dot(self.mu_beta_t[t-1][k],self.mu_beta_t[t-1][k])+sum(self.cov_beta_t[t-1][k])
 				temp3=(-2)*np.dot(self.mu_beta_t[t][k],self.mu_beta_t[t-1][k])
 				summ-=0.5/(self.sigma**2)*(temp1+temp2+temp3)
 		return summ
