@@ -67,46 +67,26 @@ class variational_inference():
 				B_t_k[int(self.document[t][d][n])] += self.phi[t][d][n][k]
 		return B_t_k
 
-	def gradient_descent_beta_0(self, k):
+
+	def gradient_descent_beta(self, t, k):
 		# find mode of f(beta) for topic k, or argmin of -f(beta)
-		b_val=self.B_func(0, k)
-		fn = lambda beta: sum(b_val)*misc.logsumexp(beta) + 0.5*np.dot(beta,beta)+0.5/(self.sigma ** 2)*np.dot(beta,beta)  \
-						  -1.0/(self.sigma ** 2)*np.dot(self.mu_beta_t[1][k],beta) - np.dot(b_val,beta)
-		res = minimize(fn, np.zeros(self.V), method='SLSQP')
-		return (res.x, b_val)
-
-	def gradient_descent_beta_t(self, t, k):
 		b_val=self.B_func(t, k)
-		fn = lambda beta: sum(b_val)*misc.logsumexp(beta) + 1.0/(self.sigma**2)*np.dot(beta,beta) \
+		if t==0:
+			fn = lambda beta: sum(b_val)*misc.logsumexp(beta) + 0.5*np.dot(beta,beta)+0.5/(self.sigma ** 2)*np.dot(beta,beta)  \
+						  -1.0/(self.sigma ** 2)*np.dot(self.mu_beta_t[1][k],beta) - np.dot(b_val,beta)
+		elif t < self.T-1:
+			fn = lambda beta: sum(b_val)*misc.logsumexp(beta) + 1.0/(self.sigma**2)*np.dot(beta,beta) \
 						  -1.0/(self.sigma ** 2) * np.dot(self.mu_beta_t[t + 1][k]+self.mu_beta_t[t - 1][k], beta)-np.dot(b_val,beta)
-		res = minimize(fn, np.zeros(self.V), method='SLSQP')
-		return (res.x, b_val)
-
-	def gradient_descent_beta_T(self, k):
-		b_val = self.B_func(self.T-1, k)
-		fn = lambda beta: sum(b_val)*misc.logsumexp(beta) + 0.5/(self.sigma ** 2)*np.dot(beta,beta) \
+		else:
+			fn = lambda beta: sum(b_val)*misc.logsumexp(beta) + 0.5/(self.sigma ** 2)*np.dot(beta,beta) \
 						  -1.0/(self.sigma ** 2)*np.dot(self.mu_beta_t[self.T - 2][k],beta)-np.dot(b_val,beta)
 		res = minimize(fn, np.zeros(self.V), method='SLSQP')
 		return (res.x, b_val)
 
-	def update_beta_0(self):
-		for k in range(self.K):
-			self.mu_beta_t[0][k], b_val = self.gradient_descent_beta_0(k)
-			s = np.exp(self.mu_beta_t[0][k])
-			t_val = sum(s)
-			
-			D = (1+ 1/(self.sigma**2))*np.ones(self.V) + sum(b_val)*s/t_val 
-			D_inv = 1/D #array of length V, to be used as diagonal later
-			v = (np.sqrt(sum(b_val))/t_val)*s
-			downstair=1-sum(D_inv*v*v)
-			D_inv_v=D_inv*v
-			upstair=np.outer(D_inv_v,D_inv_v)
-			self.cov_beta_t[0][k]=np.diag(D_inv)+upstair/downstair
-
-	def update_beta_t(self):
-		for t in range(1, self.T - 1):
+	def update_beta(self):
+		for t in range(self.T):
 			for k in range(self.K):
-				self.mu_beta_t[t][k], b_val = self.gradient_descent_beta_t(t, k)
+				self.mu_beta_t[t][k], b_val = self.gradient_descent_beta(t, k)
 				s = np.exp(self.mu_beta_t[t][k])
 				t_val = sum(s)
 				D = 2/(self.sigma**2)*np.ones(self.V) + sum(b_val)*s/t_val 
@@ -116,19 +96,6 @@ class variational_inference():
 				D_inv_v=D_inv*v
 				upstair=np.outer(D_inv_v,D_inv_v)
 				self.cov_beta_t[t][k]=np.diag(D_inv)+upstair/downstair
-	
-	def update_beta_T(self):
-		for k in range(self.K):
-			self.mu_beta_t[self.T-1][k], b_val = self.gradient_descent_beta_T(k)
-			s = np.exp(self.mu_beta_t[self.T-1][k])
-			t_val = sum(s)
-			D = 1/(self.sigma**2)*np.ones(self.V) + sum(b_val)*s/t_val 
-			D_inv = 1/D #array of length V, to be used as diagonal later
-			v = (np.sqrt(sum(b_val))/t_val)*s
-			downstair=1-sum(D_inv*v*v)
-			D_inv_v=D_inv*v
-			upstair=np.outer(D_inv_v,D_inv_v)
-			self.cov_beta_t[self.T-1][k]=np.diag(D_inv)+upstair/downstair   
 
 
 	def update_alpha(self):
@@ -269,12 +236,13 @@ class variational_inference():
 		for epoch in range(self.iters):
 			if epoch <= 2:
 				st1 = time.time()
-			self.update_beta_0()
-			#print "beta 0 updated"
-			self.update_beta_t()
-			#print "beta t updated"
-			self.update_beta_T()
+			# self.update_beta_0()
+			# #print "beta 0 updated"
+			# self.update_beta_t()
+			# #print "beta t updated"
+			# self.update_beta_T()
 			#print "beta T updated"
+			self.update_beta()
 			self.update_alpha()
 			self.update_EXP_log_sum_exp_beta_t_k()
 			#print "Exp logsumexp done"
