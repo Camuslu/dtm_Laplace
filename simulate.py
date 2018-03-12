@@ -1,4 +1,5 @@
 import numpy as np
+
 # from numpy.linalg import inv
 # import math
 # from numpy import linalg as LA
@@ -31,6 +32,7 @@ def simulate_data(K, V, N, D, T, sigma, alpha_0):
     z = np.zeros(N)
     document = np.zeros((T, D, N))
 
+
     beta = np.zeros((T,K,V))
     beta_pi = np.zeros((T,K,V))
     beta[0] = generate_mvn(np.zeros((K,V)), K, V, sigma = 1) #
@@ -45,5 +47,6 @@ def simulate_data(K, V, N, D, T, sigma, alpha_0):
             for n in range(N):
                 z = generate_multinomial(theta) #topic assignment to 1 word
                 document[t][d][n] = generate_multinomial(beta_pi[t][z]) #specific word assignment
+    document = document.astype(int)
     print ("topics= %d, vocab = %d, D = %d, N = %d, T =%d" %(K,V,D,N,T))
     return (document, beta)
